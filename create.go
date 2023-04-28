@@ -1,9 +1,9 @@
 package clickhouse
 
 import (
-	"gorm.io/gorm"
-	"gorm.io/gorm/callbacks"
-	"gorm.io/gorm/clause"
+	"github.com/gozelle/gorm"
+	"github.com/gozelle/gorm/callbacks"
+	"github.com/gozelle/gorm/clause"
 )
 
 func Create(db *gorm.DB) {
@@ -13,11 +13,11 @@ func Create(db *gorm.DB) {
 				db.Statement.AddClause(c)
 			}
 		}
-
+		
 		if db.Statement.SQL.String() == "" {
 			db.Statement.SQL.Grow(180)
 			db.Statement.AddClauseIfNotExists(clause.Insert{})
-
+			
 			if values := callbacks.ConvertToCreateValues(db.Statement); len(values.Values) >= 1 {
 				prepareValues := clause.Values{
 					Columns: values.Columns,
@@ -25,13 +25,13 @@ func Create(db *gorm.DB) {
 				}
 				db.Statement.AddClause(prepareValues)
 				db.Statement.Build("INSERT", "VALUES", "ON CONFLICT")
-
+				
 				stmt, err := db.Statement.ConnPool.PrepareContext(db.Statement.Context, db.Statement.SQL.String())
 				if db.AddError(err) != nil {
 					return
 				}
 				defer stmt.Close()
-
+				
 				for _, value := range values.Values {
 					if _, err := stmt.Exec(value...); db.AddError(err) != nil {
 						return
@@ -40,7 +40,7 @@ func Create(db *gorm.DB) {
 				return
 			}
 		}
-
+		
 		if !db.DryRun && db.Error == nil {
 			_, err := db.Statement.ConnPool.ExecContext(db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...)
 			db.AddError(err)

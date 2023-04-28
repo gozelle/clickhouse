@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
-	"gorm.io/gorm/migrator"
-	"gorm.io/gorm/schema"
+	
+	"github.com/gozelle/gorm"
+	"github.com/gozelle/gorm/clause"
+	"github.com/gozelle/gorm/migrator"
+	"github.com/gozelle/gorm/schema"
 )
 
 // Errors enumeration
@@ -36,11 +36,11 @@ func (m Migrator) CurrentDatabase() (name string) {
 func (m Migrator) FullDataTypeOf(field *schema.Field) (expr clause.Expr) {
 	// Infer the ClickHouse datatype from schema.Field information
 	expr.SQL = m.Migrator.DataTypeOf(field)
-
+	
 	// NOTE:
 	// NULL and UNIQUE keyword is not supported in clickhouse.
 	// Hence, skipping checks for field.Unique and field.NotNull
-
+	
 	// Build DEFAULT clause after DataTypeOf() expression optionally
 	if field.HasDefaultValue && (field.DefaultValueInterface != nil || field.DefaultValue != "") {
 		if field.DefaultValueInterface != nil {
@@ -51,17 +51,17 @@ func (m Migrator) FullDataTypeOf(field *schema.Field) (expr clause.Expr) {
 			expr.SQL += " DEFAULT " + field.DefaultValue
 		}
 	}
-
+	
 	// Build COMMENT clause optionally after DEFAULT
 	if comment, ok := field.TagSettings["COMMENT"]; ok {
 		expr.SQL += " COMMENT " + m.Dialector.Explain("?", comment)
 	}
-
+	
 	// Build TTl clause optionally after COMMENT
 	if ttl, ok := field.TagSettings["TTL"]; ok && ttl != "" {
 		expr.SQL += " TTL " + ttl
 	}
-
+	
 	// Build CODEC compression algorithm optionally
 	// NOTE: the codec algo name is case sensitive!
 	if codecstr, ok := field.TagSettings["CODEC"]; ok && codecstr != "" {
@@ -74,7 +74,7 @@ func (m Migrator) FullDataTypeOf(field *schema.Field) (expr clause.Expr) {
 		codecSQL := fmt.Sprintf(" CODEC(%s) ", codecArgsSQL)
 		expr.SQL += codecSQL
 	}
-
+	
 	return expr
 }
 
@@ -88,7 +88,7 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 				createTableSQL = "CREATE TABLE ?%s(%s %s %s) %s"
 				args           = []interface{}{clause.Table{Name: stmt.Table}}
 			)
-
+			
 			// Step 1. Build column datatype SQL string
 			columnSlice := make([]string, 0, len(stmt.Schema.DBNames))
 			for _, dbName := range stmt.Schema.DBNames {
@@ -100,7 +100,7 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 				)
 			}
 			columnStr := strings.Join(columnSlice, ",")
-
+			
 			// Step 2. Build constraint check SQL string if any constraint
 			constrSlice := make([]string, 0, len(columnSlice))
 			for _, check := range stmt.Schema.ParseCheckConstraints() {
@@ -114,7 +114,7 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 			if len(constrSlice) > 0 {
 				constrStr = ", " + constrStr
 			}
-
+			
 			// Step 3. Build index SQL string
 			// NOTE: clickhouse does not support for index class.
 			indexSlice := make([]string, 0, 10)
@@ -130,19 +130,19 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 				// TODO(iqdf): support primary key by put it as pass the fieldname
 				// as MergeTree(...) parameters. But somehow it complained.
 				// Note that primary key doesn't ensure uniqueness
-
+				
 				// Get indexing type `gorm:"index,type:minmax"`
 				// Choice: minmax | set(n) | ngrambf_v1(n, size, hash, seed) | bloomfilter()
 				indexType := m.Dialector.DefaultIndexType
 				if index.Type != "" {
 					indexType = index.Type
 				}
-
+				
 				// Get expression for index options
 				// Syntax: (`colname1`, ...)
 				buildIndexOptions := tx.Migrator().(migrator.BuildIndexOptionsInterface)
 				indexOptions := buildIndexOptions.BuildIndexOptions(index.Fields, stmt)
-
+				
 				// Stringify index builder
 				// TODO (iqdf): support granularity
 				str := fmt.Sprintf("INDEX ? ? TYPE %s GRANULARITY %d", indexType, m.getIndexGranularityOption(index.Fields))
@@ -153,22 +153,22 @@ func (m Migrator) CreateTable(models ...interface{}) error {
 			if len(indexSlice) > 0 {
 				indexStr = ", " + indexStr
 			}
-
+			
 			// Step 4. Finally assemble CREATE TABLE ... SQL string
 			engineOpts := m.Dialector.DefaultTableEngineOpts
 			if tableOption, ok := m.DB.Get("gorm:table_options"); ok {
 				engineOpts = fmt.Sprint(tableOption)
 			}
-
+			
 			clusterOpts := ""
 			if clusterOption, ok := m.DB.Get("gorm:table_cluster_options"); ok {
 				clusterOpts = " " + fmt.Sprint(clusterOption) + " "
 			}
-
+			
 			createTableSQL = fmt.Sprintf(createTableSQL, clusterOpts, columnStr, constrStr, indexStr, engineOpts)
-
+			
 			err = tx.Exec(createTableSQL, args...).Error
-
+			
 			return
 		}); err != nil {
 			return err
@@ -264,19 +264,19 @@ func (m Migrator) HasColumn(value interface{}, field string) bool {
 	m.RunWithValue(value, func(stmt *gorm.Statement) error {
 		currentDatabase := m.DB.Migrator().CurrentDatabase()
 		name := field
-
+		
 		if stmt.Schema != nil {
 			if field := stmt.Schema.LookUpField(field); field != nil {
 				name = field.DBName
 			}
 		}
-
+		
 		return m.DB.Raw(
 			"SELECT count(*) FROM system.columns WHERE database = ? AND table = ? AND name = ?",
 			currentDatabase, stmt.Table, name,
 		).Row().Scan(&count)
 	})
-
+	
 	return count > 0
 }
 
@@ -288,16 +288,16 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 		if err != nil {
 			return err
 		}
-
+		
 		defer func() {
 			if err == nil {
 				err = rows.Close()
 			}
 		}()
-
+		
 		var rawColumnTypes []*sql.ColumnType
 		rawColumnTypes, err = rows.ColumnTypes()
-
+		
 		columnTypeSQL := "SELECT name, type, default_expression, comment, is_in_primary_key, character_octet_length, numeric_precision, numeric_precision_radix, numeric_scale, datetime_precision FROM system.columns WHERE database = ? AND table = ?"
 		if m.Dialector.DontSupportColumnPrecision {
 			columnTypeSQL = "SELECT name, type, default_expression, comment, is_in_primary_key FROM system.columns WHERE database = ? AND table = ?"
@@ -306,9 +306,9 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 		if rowErr != nil {
 			return rowErr
 		}
-
+		
 		defer columns.Close()
-
+		
 		for columns.Next() {
 			var (
 				column            migrator.ColumnType
@@ -321,17 +321,17 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 					&column.NameValue, &column.DataTypeValue, &column.DefaultValueValue, &column.CommentValue, &column.PrimaryKeyValue, &lengthValue, &decimalSizeValue, &radixValue, &scaleValue, &datetimePrecision,
 				}
 			)
-
+			
 			if m.Dialector.DontSupportColumnPrecision {
 				values = []interface{}{&column.NameValue, &column.DataTypeValue, &column.DefaultValueValue, &column.CommentValue, &column.PrimaryKeyValue}
 			}
-
+			
 			if scanErr := columns.Scan(values...); scanErr != nil {
 				return scanErr
 			}
-
+			
 			column.ColumnTypeValue = column.DataTypeValue
-
+			
 			if decimalSizeValue != nil {
 				column.DecimalSizeValue.Int64 = int64(*decimalSizeValue)
 				column.DecimalSizeValue.Valid = true
@@ -339,38 +339,38 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 				column.DecimalSizeValue.Int64 = int64(*datetimePrecision)
 				column.DecimalSizeValue.Valid = true
 			}
-
+			
 			if scaleValue != nil {
 				column.ScaleValue.Int64 = int64(*scaleValue)
 				column.ScaleValue.Valid = true
 			}
-
+			
 			if lengthValue != nil {
 				column.LengthValue.Int64 = int64(*lengthValue)
 				column.LengthValue.Valid = true
 			}
-
+			
 			if column.DefaultValueValue.Valid {
 				column.DefaultValueValue.String = strings.Trim(column.DefaultValueValue.String, "'")
 			}
-
+			
 			if m.Dialector.DontSupportEmptyDefaultValue && column.DefaultValueValue.String == "" {
 				column.DefaultValueValue.Valid = false
 			}
-
+			
 			for _, c := range rawColumnTypes {
 				if c.Name() == column.NameValue.String {
 					column.SQLColumnType = c
 					break
 				}
 			}
-
+			
 			columnTypes = append(columnTypes, column)
 		}
-
+		
 		return
 	})
-
+	
 	return columnTypes, execErr
 }
 
@@ -396,14 +396,14 @@ func (m Migrator) CreateIndex(value interface{}, name string) error {
 				clause.Column{Name: index.Name},
 				opts,
 			}
-
+			
 			// Get indexing type `gorm:"index,type:minmax"`
 			// Choice: minmax | set(n) | ngrambf_v1(n, size, hash, seed) | bloomfilter()
 			indexType := m.Dialector.DefaultIndexType
 			if index.Type != "" {
 				indexType = index.Type
 			}
-
+			
 			// NOTE: concept of UNIQUE | FULLTEXT | SPATIAL index
 			// is NOT supported in clickhouse
 			createIndexSQL := "ALTER TABLE ? ADD INDEX ? ? TYPE %s GRANULARITY %d"                             // TODO(iqdf): how to inject Granularity
@@ -439,22 +439,22 @@ func (m Migrator) HasIndex(value interface{}, name string) bool {
 	var count int
 	m.RunWithValue(value, func(stmt *gorm.Statement) error {
 		currentDatabase := m.DB.Migrator().CurrentDatabase()
-
+		
 		if idx := stmt.Schema.LookIndex(name); idx != nil {
 			name = idx.Name
 		}
-
+		
 		showCreateTableSQL := fmt.Sprintf("SHOW CREATE TABLE %s.%s", currentDatabase, stmt.Table)
 		var createStmt string
 		if err := m.DB.Raw(showCreateTableSQL).Row().Scan(&createStmt); err != nil {
 			return err
 		}
-
+		
 		indexNames := m.extractIndexNamesFromCreateStmt(createStmt)
-
+		
 		// fmt.Printf("==== DEBUG ==== m.Mirror.HasIndex(%v, %v) count = %v, stmt: [\n%v\n]\nnames: %v\n",
 		// 	stmt.Table, name, count, createStmt, indexNames)
-
+		
 		for _, indexName := range indexNames {
 			if indexName == name {
 				count = 1
@@ -463,7 +463,7 @@ func (m Migrator) HasIndex(value interface{}, name string) bool {
 		}
 		return nil
 	})
-
+	
 	return count > 0
 }
 

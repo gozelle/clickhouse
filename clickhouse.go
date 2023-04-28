@@ -6,15 +6,15 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-
+	
 	_ "github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/gozelle/gorm"
+	"github.com/gozelle/gorm/callbacks"
+	"github.com/gozelle/gorm/clause"
+	"github.com/gozelle/gorm/logger"
+	"github.com/gozelle/gorm/migrator"
+	"github.com/gozelle/gorm/schema"
 	"github.com/hashicorp/go-version"
-	"gorm.io/gorm"
-	"gorm.io/gorm/callbacks"
-	"gorm.io/gorm/clause"
-	"gorm.io/gorm/logger"
-	"gorm.io/gorm/migrator"
-	"gorm.io/gorm/schema"
 )
 
 type Config struct {
@@ -56,29 +56,29 @@ func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 		DeleteClauses: []string{"DELETE", "WHERE"},
 	})
 	db.Callback().Create().Replace("gorm:create", Create)
-
+	
 	// assign option fields to default values
 	if dialector.DriverName == "" {
 		dialector.DriverName = "clickhouse"
 	}
-
+	
 	// default settings
 	if dialector.Config.DefaultGranularity == 0 {
 		dialector.Config.DefaultGranularity = 3
 	}
-
+	
 	if dialector.Config.DefaultCompression == "" {
 		dialector.Config.DefaultCompression = "LZ4"
 	}
-
+	
 	if dialector.DefaultIndexType == "" {
 		dialector.DefaultIndexType = "minmax"
 	}
-
+	
 	if dialector.DefaultTableEngineOpts == "" {
 		dialector.DefaultTableEngineOpts = "ENGINE=MergeTree() ORDER BY tuple()"
 	}
-
+	
 	if dialector.Conn != nil {
 		db.ConnPool = dialector.Conn
 	} else {
@@ -87,7 +87,7 @@ func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 			return err
 		}
 	}
-
+	
 	if !dialector.SkipInitializeWithVersion {
 		err = db.ConnPool.QueryRowContext(ctx, "SELECT version()").Scan(&dialector.Version)
 		if err != nil {
@@ -95,18 +95,18 @@ func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 		}
 		if dbversion, err := version.NewVersion(dialector.Version); err == nil {
 			versionNoRenameColumn, _ := version.NewConstraint("< 20.4")
-
+			
 			if versionNoRenameColumn.Check(dbversion) {
 				dialector.Config.DontSupportRenameColumn = true
 			}
-
+			
 			versionNoPrecisionColumn, _ := version.NewConstraint("< 21.11")
 			if versionNoPrecisionColumn.Check(dbversion) {
 				dialector.DontSupportColumnPrecision = true
 			}
 		}
 	}
-
+	
 	for k, v := range dialector.ClauseBuilders() {
 		db.ClauseBuilders[k] = v
 	}
@@ -151,7 +151,7 @@ func (dialector Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 	clauseBuilders := map[string]clause.ClauseBuilder{
 		"DELETE": func(c clause.Clause, builder clause.Builder) {
 			builder.WriteString("ALTER TABLE ")
-
+			
 			var addedTable bool
 			if stmt, ok := builder.(*gorm.Statement); ok {
 				if c, ok := stmt.Clauses["FROM"]; ok {
@@ -161,7 +161,7 @@ func (dialector Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 				}
 				modifyStatementWhereConds(stmt)
 			}
-
+			
 			if !addedTable {
 				builder.WriteQuoted(clause.Table{Name: clause.CurrentTable})
 			}
@@ -169,7 +169,7 @@ func (dialector Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 		},
 		"UPDATE": func(c clause.Clause, builder clause.Builder) {
 			builder.WriteString("ALTER TABLE ")
-
+			
 			var addedTable bool
 			if stmt, ok := builder.(*gorm.Statement); ok {
 				if c, ok := stmt.Clauses["FROM"]; ok {
@@ -179,7 +179,7 @@ func (dialector Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 				}
 				modifyStatementWhereConds(stmt)
 			}
-
+			
 			if !addedTable {
 				builder.WriteQuoted(clause.Table{Name: clause.CurrentTable})
 			}
@@ -190,7 +190,7 @@ func (dialector Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 			c.Build(builder)
 		},
 	}
-
+	
 	return clauseBuilders
 }
 
@@ -252,7 +252,7 @@ func (dialector Dialector) DataTypeOf(field *schema.Field) string {
 		}
 		return "DateTime64" + precision
 	}
-
+	
 	return string(field.DataType)
 }
 

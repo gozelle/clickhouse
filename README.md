@@ -12,8 +12,8 @@ You can simply test your connection to your database with the following:
 package main
 
 import (
-	"gorm.io/driver/clickhouse"
-	"gorm.io/gorm"
+	"github.com/gozelle/clickhouse"
+	"github.com/gozelle/gorm"
 )
 
 type User struct {
@@ -59,8 +59,8 @@ func main() {
 package main
 
 import (
-  "gorm.io/driver/clickhouse"
-  "gorm.io/gorm"
+  "github.com/gozelle/clickhouse"
+  "github.com/gozelle/gorm"
 )
 
 sqlDB, err := clickhouse.OpenDB(&clickhouse.Options{
@@ -94,8 +94,8 @@ func main() {
 package main
 
 import (
-  "gorm.io/driver/clickhouse"
-  "gorm.io/gorm"
+  "github.com/gozelle/clickhouse"
+  "github.com/gozelle/gorm"
 )
 
 // refer to https://github.com/ClickHouse/clickhouse-go
